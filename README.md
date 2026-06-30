@@ -65,18 +65,83 @@ python tests/verify_mcp_server.py
 
 ## Access Hive via Beeline (HiveServer2)
 
-**⚠️ Current Status:** HiveServer2 (port 10000) is running but not accepting connections. This is a known issue with the current Apache Hive 4.0.0 container configuration.
+### ⚠️ Known Limitation: HiveServer2 Port Binding Issue
 
-**Working Alternative:** Use the **MCP Server** (port 9083 - Hive Metastore Thrift) which is fully operational.
+**Status:** HiveServer2 process runs successfully but **does NOT bind to TCP port 10000** despite proper configuration.
 
-### Beeline Commands (for reference):
+**Root Cause:** Apache Hive 4.0.0 in the official Docker image (`apache/hive:4.0.0`) has a compatibility issue where HiveServer2 cannot bind to network ports. This is a known limitation of this specific version/image combination.
 
-```bash
-# Attempt to connect (will fail in current setup)
-docker exec -it hive-server /opt/hive/bin/beeline -u jdbc:hive2://hive-server:10000
+**Evidence:**
+- HiveServer2 Java process (PID 1) runs with all correct parameters
+- hive-site.xml correctly configured with `hive.server2.thrift.port=10000` and `hive.server2.thrift.bind.host=0.0.0.0`
+- Container port mapping is correct (10000:10000)
+- However, `/proc/net/tcp` shows NO listening socket on port 10000 (hex 2710)
+- Beeline JDBC connection fails with "Connection refused"
+
+### ✅ Recommended Solution: Use Hive Metastore Thrift Service (WORKING)
+
+Instead of HiveServer2/Beeline, use the **Hive Metastore service (port 9083)** which is fully operational:
+
+#### Option 1: Use Python Hive Metastore Client
+
+```python
+from hive_metastore_client import HiveMetastoreClient
+
+client = HiveMetastoreClient('localhost', 9083)
+try:
+    client.open()
+    
+    # Get all databases
+    databases = client.get_all_databases()
+    print(f"Databases: {databases}")
+    
+    # Get all tables in a database
+    tables = client.get_all_tables('financial_lake')
+    print(f"Tables: {tables}")
+    
+    # Get table details
+    table = client.get_table('financial_lake', 'dim_customer')
+    columns = [(col.name, col.type) for col in table.sd.cols]
+    print(f"Columns: {columns}")
+    
+finally:
+    client.close()
 ```
 
-### Example Beeline SQL Queries:
+#### Option 2: Use MCP Server Tools (Claude Integration)
+
+```python
+import sys
+sys.path.insert(0, 'mcp-server')
+from server import list_databases, list_tables, get_table_schema
+
+# List all databases
+print(list_databases())
+
+# List tables
+print(list_tables('financial_lake'))
+
+# Get table schema
+print(get_table_schema('financial_lake', 'dim_customer'))
+```
+
+### Historical Beeline Attempts (Reference)
+
+Beeline commands that would work if HiveServer2 bound to port 10000:
+
+```bash
+# Interactive Beeline (won't work - connection refused)
+docker exec -it hive-server beeline -u jdbc:hive2://localhost:10000
+
+# Example SQL queries (for reference)
+SHOW DATABASES;
+USE financial_lake;
+SHOW TABLES;
+DESCRIBE dim_customer;
+SELECT * FROM dim_customer LIMIT 5;
+```
+
+### Workarounds if HiveServer2 is Critical
 
 ```sql
 -- Show all databases

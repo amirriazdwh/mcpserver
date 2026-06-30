@@ -28,6 +28,7 @@
     <name>hive.metastore.warehouse.dir</name>
     <value>/opt/hive/data/warehouse</value>
   </property>
+  <!-- HiveServer2 Thrift Configuration -->
   <property>
     <name>hive.server2.transport.mode</name>
     <value>binary</value>
@@ -39,5 +40,37 @@
   <property>
     <name>hive.server2.thrift.bind.host</name>
     <value>0.0.0.0</value>
+  </property>
+  <!-- HiveServer2 WebUI Configuration -->
+  <property>
+    <name>hive.server2.webui.host</name>
+    <value>0.0.0.0</value>
+  </property>
+  <property>
+    <name>hive.server2.webui.port</name>
+    <value>10002</value>
+  </property>
+  <!-- Authentication Configuration -->
+  <property>
+    <name>hive.server2.authentication</name>
+    <value>NONE</value>
+  </property>
+  <!-- Connection Pool Configuration -->
+  <property>
+    <name>datanucleus.connectionPoolingType</name>
+    <value>bonecp</value>
+  </property>
+  <property>
+    <name>datanucleus.connectionPool.maxPoolSize</name>
+    <value>10</value>
+  </property>
+  <!-- Disable strict metastore mode -->
+  <property>
+    <name>hive.strict.checks.cartesian.product</name>
+    <value>false</value>
+  </property>
+  <property>
+    <name>hive.exec.dynamic.partition.mode</name>
+    <value>nonstrict</value>
   </property>
 </configuration>
