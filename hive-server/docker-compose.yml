@@ -32,6 +32,8 @@ services:
     container_name: hive-server
     environment:
       SERVICE_NAME: hiveserver2
+      DB_DRIVER: postgres
+      SERVICE_OPTS: "-Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://postgres:5432/metastore_db -Djavax.jdo.option.ConnectionUserName=hive -Djavax.jdo.option.ConnectionPassword=password"
       HIVE_SITE_CONF_hive_metastore_uris: "thrift://hive-metastore:9083"
     depends_on:
       - hive-metastore
