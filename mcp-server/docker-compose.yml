@@ -1,0 +1,17 @@
+services:
+  mcp-server:
+    build:
+      context: ./mcp-server
+      dockerfile: Dockerfile
+    container_name: mcp-server
+    environment:
+      HIVE_HOST: hive-metastore
+      HIVE_PORT: 9083
+    networks:
+      - hive_net
+    stdin_open: true
+    tty: true
+
+networks:
+  hive_net:
+    external: true
