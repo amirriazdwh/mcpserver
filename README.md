@@ -245,3 +245,74 @@ docker compose -f hive-server/docker-compose.yml restart
 - Run after Hive stack is running
 - Check MCP logs: `docker logs mcp-server | tail -20`
 
+## VS Code Agent Integration
+
+✅ **Fully Configured for VS Code Agents (Cline, Copilot, etc.)**
+
+### How It Works
+
+When you start the MCP server, VS Code agents automatically gain access to complete Hive schema:
+
+1. **Agent Discovery** - Agents query `list_databases()` to find available databases
+2. **Table Exploration** - Agents query `list_tables(database)` for table lists  
+3. **Schema Details** - Agents query `get_table_schema(database, table)` for full schema
+4. **Intelligent Suggestions** - Agent uses schema to generate optimized code and queries
+
+### Quick Start with Agents
+
+```bash
+# 1. Start Hive Stack
+docker compose -f hive-server/docker-compose.yml up -d
+
+# 2. Start MCP Server
+./start-mcp-server.sh
+
+# 3. Test Agent Context
+python test-agent-integration.py
+```
+
+### Agent Capabilities
+
+With schema context available, agents can:
+- ✅ Smart SQL auto-completion and suggestions
+- ✅ Schema-aware query generation
+- ✅ Table relationship detection
+- ✅ Data type validation
+- ✅ Query optimization suggestions
+- ✅ Data model improvements
+
+### Example: Agent Helping You
+
+**Your Request:**
+```
+"Write a query to get all customers and their total transaction amounts"
+```
+
+**Agent Automatically:**
+1. Discovers `financial_lake` database
+2. Finds `dim_customer` and `fact_transaction` tables
+3. Reads schema to find columns and types
+4. Detects `customer_id` relationship between tables
+5. Generates optimized JOIN query
+
+**Agent Suggests:**
+```sql
+SELECT 
+  c.customer_id,
+  c.first_name,
+  c.last_name,
+  SUM(ft.amount) as total_amount
+FROM financial_lake.dim_customer c
+JOIN financial_lake.fact_transaction ft
+  ON c.customer_id = ft.customer_id
+GROUP BY c.customer_id, c.first_name, c.last_name
+ORDER BY total_amount DESC
+```
+
+### Agent Integration Files
+
+- `.vscode/cline_mcp_config.json` - VS Code agent configuration
+- `MCP_AGENT_SETUP.md` - Complete agent integration guide  
+- `start-mcp-server.sh` - MCP server startup script
+- `test-agent-integration.py` - Agent capability demonstration
+
