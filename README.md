@@ -22,11 +22,35 @@ After Hive services are running, start the MCP service from the `mcp-server` com
 docker compose -f mcp-server/docker-compose.yml up -d
 ```
 
-## Connect to HiveServer2 with Beeline
+## Access Hive Metadata via MCP Server
 
-```bash
-docker exec -it hive-server beeline -u jdbc:hive2://localhost:10000
+The MCP server provides three tools for accessing Hive metadata:
+
+- **list_databases()** - Returns all available databases
+- **list_tables(database_name)** - Lists tables in a specific database
+- **get_table_schema(database_name, table_name)** - Returns column names and types
+
+Example from Python:
+
+```python
+import sys
+sys.path.insert(0, 'mcp-server')
+from server import list_databases, list_tables, get_table_schema
+
+# List all databases
+databases = list_databases()
+print(databases)  # ['default', 'financial_lake']
+
+# List tables in financial_lake
+tables = list_tables('financial_lake')
+print(tables)  # ['dim_customer', 'fact_transaction']
+
+# Get table schema
+schema = get_table_schema('financial_lake', 'dim_customer')
+print(schema)  # {'customer_id': 'int', 'first_name': 'string', 'last_name': 'string'}
 ```
+
+**Note:** HiveServer2 (port 10000) support is available but not currently the primary interface. The MCP server connects directly to the Hive Metastore Thrift service (port 9083) which is fully operational.
 
 ## Stop services
 
@@ -63,3 +87,4 @@ docker ps
 ```
 
 # mcpserver
+
