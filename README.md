@@ -65,15 +65,18 @@ python tests/verify_mcp_server.py
 
 ## Access Hive via Beeline (HiveServer2)
 
-To connect to Hive using Beeline (HiveServer2 on port 10000):
+**⚠️ Current Status:** HiveServer2 (port 10000) is running but not accepting connections. This is a known issue with the current Apache Hive 4.0.0 container configuration.
 
-**From inside the hive-server container:**
+**Working Alternative:** Use the **MCP Server** (port 9083 - Hive Metastore Thrift) which is fully operational.
+
+### Beeline Commands (for reference):
 
 ```bash
+# Attempt to connect (will fail in current setup)
 docker exec -it hive-server /opt/hive/bin/beeline -u jdbc:hive2://hive-server:10000
 ```
 
-**Interactive Beeline commands:**
+### Example Beeline SQL Queries:
 
 ```sql
 -- Show all databases
@@ -95,7 +98,33 @@ DESC FORMATTED fact_transaction;
 SELECT * FROM dim_customer LIMIT 5;
 ```
 
-**Note:** HiveServer2 (port 10000) requires proper Java configuration. The MCP server (port 9083 - Hive Metastore Thrift) is the primary recommended interface and is guaranteed to be operational. If HiveServer2 doesn't respond, use the MCP server tools for metadata access.
+### Recommended: Use Python Client Instead
+
+Since Beeline/HiveServer2 isn't available, use the Python Hive Metastore client:
+
+```python
+from hive_metastore_client import HiveMetastoreClient
+
+client = HiveMetastoreClient('localhost', 9083)
+try:
+    client.open()
+    
+    # Get all databases
+    databases = client.get_all_databases()
+    print(f"Databases: {databases}")
+    
+    # Get all tables in a database
+    tables = client.get_all_tables('financial_lake')
+    print(f"Tables: {tables}")
+    
+    # Get table details
+    table = client.get_table('financial_lake', 'dim_customer')
+    columns = [(col.name, col.type) for col in table.sd.cols]
+    print(f"Columns: {columns}")
+    
+finally:
+    client.close()
+```
 
 ## Stop services
 
