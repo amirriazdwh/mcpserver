@@ -311,7 +311,7 @@ ORDER BY total_amount DESC
 
 ### Agent Integration Files
 
-- `.vscode/cline_mcp_config.json` - VS Code agent configuration
+- `.vscode/mcp_config.json` - VS Code agent configuration
 - `MCP_AGENT_SETUP.md` - Complete agent integration guide  
 - `start-mcp-server.sh` - MCP server startup script
 - `test-agent-integration.py` - Agent capability demonstration

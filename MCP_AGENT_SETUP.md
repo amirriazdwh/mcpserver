@@ -135,7 +135,7 @@ When you ask a VS Code agent (like Cline) to help with Hive:
 
 ## Configuration Files
 
-- `.vscode/cline_mcp_config.json` - VS Code agent configuration
+- `.vscode/mcp_config.json` - VS Code agent configuration
 - `mcp-server/docker-compose.yml` - Docker deployment config
 - `mcp-server/server.py` - MCP server implementation
 - `mcp-server/Dockerfile` - Container image
