@@ -2,11 +2,11 @@
   "servers": {
     "hive-metadata": {
       "type": "stdio",
-      "command": "python",
+      "command": "/home/amirriaz/hive-store/.venv/bin/python",
       "args": [
-        "server.py"
+        "/home/amirriaz/hive-store/mcp-server/server.py"
       ],
-      "cwd": "${workspaceFolder}/mcp-server",
+      "cwd": "/home/amirriaz/hive-store/mcp-server",
       "env": {
         "HIVE_HOST": "localhost",
         "HIVE_PORT": "9083"
