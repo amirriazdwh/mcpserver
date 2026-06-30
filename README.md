@@ -1,194 +1,247 @@
 # Hive Store
 
-## Start Hive services
+Complete Hive + MCP metadata stack with PostgreSQL-backed persistence. ✅ **All components functional and data persists across container restarts.**
 
-Create the shared network if it does not already exist:
+## Architecture
 
-```bash
-docker network create hive_net
-```
+- **PostgreSQL** (port 5432): Persistent metastore backend with named volume
+- **Hive Metastore** (port 9083): Thrift service for metadata access
+- **HiveServer2** (port 10000): JDBC interface for Beeline/SQL access
+- **MCP Server** (optional): Model Context Protocol server for Claude integration
 
-Start Hive and metastore services using the `hive-server` component compose file:
+## Quick Start
+
+### 1. Start Hive Stack
 
 ```bash
 docker compose -f hive-server/docker-compose.yml up -d
 ```
 
-## Start MCP server
+This starts:
+- PostgreSQL metastore database
+- Hive Metastore service (port 9083)
+- HiveServer2 JDBC service (port 10000)
 
-After Hive services are running, start the MCP service from the `mcp-server` component directory:
-
-```bash
-docker compose -f mcp-server/docker-compose.yml up -d
-```
-
-## Access Hive Metadata via MCP Server (Recommended)
-
-The MCP server provides three tools for accessing Hive metadata via the Hive Metastore Thrift service (port 9083):
-
-- **list_databases()** - Returns all available databases
-- **list_tables(database_name)** - Lists tables in a specific database
-- **get_table_schema(database_name, table_name)** - Returns column names and types
-
-Example from Python:
-
-```python
-import sys
-import os
-sys.path.insert(0, 'mcp-server')
-
-# Set connection to localhost for host-based testing
-os.environ['HIVE_HOST'] = 'localhost'
-os.environ['HIVE_PORT'] = '9083'
-
-from server import list_databases, list_tables, get_table_schema
-
-# List all databases
-databases = list_databases()
-print(databases)  # ['default', 'financial_lake']
-
-# List tables in financial_lake
-tables = list_tables('financial_lake')
-print(tables)  # ['dim_customer', 'fact_transaction']
-
-# Get table schema
-schema = get_table_schema('financial_lake', 'dim_customer')
-print(schema)  # {'customer_id': 'int', 'first_name': 'string', 'last_name': 'string'}
-```
-
-Run the verification script to test MCP server functionality:
+### 2. Verify Services Running
 
 ```bash
-. .venv/bin/activate
-python tests/verify_mcp_server.py
+docker ps
 ```
 
-## Access Hive via Beeline (HiveServer2) ✅ WORKING
+You should see 3 containers: `hive-server`, `hive-metastore`, `hive-metastore-db`
 
-### Quick Start: Connect to HiveServer2
+### 3. Create Sample Schema (Optional)
 
-**From your host machine:**
+```bash
+docker exec hive-server beeline -u jdbc:hive2://hive-server:10000 -e "
+CREATE DATABASE IF NOT EXISTS financial_lake;
+USE financial_lake;
+CREATE TABLE dim_customer (customer_id INT, first_name STRING, last_name STRING);
+CREATE TABLE fact_transaction (transaction_id STRING, customer_id INT, amount DOUBLE);
+"
+```
+
+### 4. Test Persistence
+
+Restart containers and verify schema persists:
+
+```bash
+docker compose -f hive-server/docker-compose.yml restart
+docker exec hive-server beeline -u jdbc:hive2://hive-server:10000 -e "SHOW DATABASES;"
+```
+
+✅ Both `default` and `financial_lake` will still exist.
+
+## Persistence Guarantee
+
+✅ **Schema persists across all restarts** because:
+- PostgreSQL data stored in named volume `hive-db-data` (mounted to `/var/lib/postgresql/data`)
+- HiveServer2 uses PostgreSQL backend (not local Derby)
+- Hive Metastore also uses same PostgreSQL backend
+- No data loss on container restart or rebuild
+
+## Access Methods
+
+### Method 1: Beeline/HiveServer2 (JDBC)
+
+Interactive Beeline session:
 
 ```bash
 docker exec -it hive-server beeline -u jdbc:hive2://hive-server:10000
 ```
 
-**Interactive Beeline session:**
+Non-interactive queries:
 
 ```bash
-docker exec -it hive-server beeline -u jdbc:hive2://hive-server:10000
+docker exec hive-server beeline -u jdbc:hive2://hive-server:10000 -e "SHOW DATABASES;"
 ```
 
-Then run Hive SQL commands like:
+Beeline SQL examples:
 
 ```sql
 -- Show all databases
 SHOW DATABASES;
 
 -- Create and use a database  
-CREATE DATABASE IF NOT EXISTS financial_lake;
+CREATE DATABASE financial_lake;
 USE financial_lake;
 
 -- Create tables
-CREATE TABLE dim_customer (
-  customer_id INT,
-  first_name STRING,
-  last_name STRING
-);
+CREATE TABLE dim_customer (customer_id INT, first_name STRING, last_name STRING);
+CREATE TABLE fact_transaction (transaction_id STRING, customer_id INT, amount DOUBLE);
 
-CREATE TABLE fact_transaction (
-  transaction_id STRING,
-  customer_id INT,
-  amount DOUBLE
-);
-
--- List tables
+-- List and describe
 SHOW TABLES;
-
--- Describe table schema
 DESCRIBE dim_customer;
 
--- Query data
+-- Query
 SELECT * FROM dim_customer LIMIT 5;
 ```
 
-### Non-interactive Beeline Commands
+### Method 2: MCP Server Tools (Recommended for Claude Integration)
 
-Execute SQL directly without opening interactive session:
-
-```bash
-docker exec hive-server beeline -u jdbc:hive2://hive-server:10000 -e "SHOW DATABASES;"
-```
+The MCP server provides three tools via the Hive Metastore Thrift service (port 9083):
 
 ```bash
-docker exec hive-server beeline -u jdbc:hive2://hive-server:10000 -e "
-CREATE DATABASE IF NOT EXISTS mydb;
-USE mydb;
-CREATE TABLE mytable (id INT, name STRING);
-SHOW TABLES;
-"
+docker compose -f mcp-server/docker-compose.yml up -d
 ```
 
-### Important Notes
+Python example:
 
-⚠️ **HiveServer2 binding note:** HiveServer2 binds to the container's internal network interface. To connect:
-- ✅ From host: Use `docker exec -it hive-server beeline` or connect within Docker network
-- ❌ Cannot connect directly to `jdbc:hive2://localhost:10000` from host machine
-- ✅ Can connect to `jdbc:hive2://hive-server:10000` from containers in same network
-- ✅ Can use `docker exec` for seamless access from host
+```python
+import sys
+import os
+sys.path.insert(0, 'mcp-server')
+os.environ['HIVE_HOST'] = 'localhost'
+os.environ['HIVE_PORT'] = '9083'
 
-### Alternative: Use Python Hive Metastore Client
+from server import list_databases, list_tables, get_table_schema
 
-For programmatic access, use the Python client directly:
+# List all databases
+databases = list_databases()  # ['default', 'financial_lake']
+
+# List tables
+tables = list_tables('financial_lake')  # ['dim_customer', 'fact_transaction']
+
+# Get table schema
+schema = get_table_schema('financial_lake', 'dim_customer')
+# {'customer_id': 'int', 'first_name': 'string', 'last_name': 'string'}
+```
+
+Verify MCP server:
+
+```bash
+. .venv/bin/activate
+python tests/verify_mcp_server.py
+```
+
+### Method 3: Python Hive Metastore Client
+
+Direct Thrift client access:
 
 ```python
 from hive_metastore_client import HiveMetastoreClient
 
 client = HiveMetastoreClient('localhost', 9083)
-try:
-    client.open()
-    databases = client.get_all_databases()
-    tables = client.get_all_tables('financial_lake')
-    table = client.get_table('financial_lake', 'dim_customer')
-    columns = [(col.name, col.type) for col in table.sd.cols]
-    print(f"Columns: {columns}")
-finally:
-    client.close()
+client.open()
+
+# Get databases
+databases = client.get_all_databases()  # ['default', 'financial_lake']
+
+# Get tables
+tables = client.get_all_tables('financial_lake')  # ['dim_customer', 'fact_transaction']
+
+# Get table schema
+table = client.get_table('financial_lake', 'dim_customer')
+columns = [(col.name, col.type) for col in table.sd.cols]
+# [('customer_id', 'int'), ('first_name', 'string'), ('last_name', 'string')]
+
+client.close()
 ```
 
-## Stop services
+## Network Note
+
+⚠️ **HiveServer2 Access:**
+- ✅ Use `docker exec -it hive-server beeline` from host (seamless)
+- ✅ Use `hive-server:10000` from within Docker containers
+- ❌ Cannot use `localhost:10000` from host directly (container isolation)
+
+## Testing
+
+### Run All Tests
+
+```bash
+. .venv/bin/activate
+python tests/verify_mcp_server.py   # MCP server verification
+pytest tests/test_hive_integration.py  # Integration tests
+```
+
+### Manual Verification
+
+```bash
+# Check Hive services
+docker ps | grep -E "hive|postgres"
+
+# Verify PostgreSQL persistence
+docker exec hive-metastore-db psql -U hive metastore_db -c 'SELECT "NAME" FROM "DBS";'
+
+# Verify MCP can access metadata
+docker exec hive-server beeline -u jdbc:hive2://hive-server:10000 -e "SHOW DATABASES;"
+```
+
+## Stop Services
+
+Hive stack:
 
 ```bash
 docker compose -f hive-server/docker-compose.yml down
 ```
 
+MCP server:
+
 ```bash
 docker compose -f mcp-server/docker-compose.yml down
 ```
 
-## Sanity testing
-
-From the repository root, install development dependencies and run the Hive integration test:
+Keep PostgreSQL data (restart-safe):
 
 ```bash
-cd /home/amirriaz/hive-store
-python3 -m pip install -r requirements-dev.txt
-pytest tests/test_hive_integration.py
+docker compose -f hive-server/docker-compose.yml restart
 ```
 
-To verify the MCP server tool functions directly:
+## Component Details
 
-```bash
-cd /home/amirriaz/hive-store
-. .venv/bin/activate
-python tests/verify_mcp_server.py
-```
+| Component | Port | Status | Notes |
+|-----------|------|--------|-------|
+| PostgreSQL | 5432 | ✅ Internal | Persistent volume: `hive-db-data` |
+| Hive Metastore | 9083 | ✅ Thrift | Uses PostgreSQL backend |
+| HiveServer2 | 10000 | ✅ JDBC | Uses PostgreSQL backend |
+| MCP Server | - | Optional | Requires separate `docker compose up` |
 
-## List running containers
+## Data Persistence
 
-```bash
-docker ps
-```
+✅ **Guaranteed Persistence:**
+- All databases created via Beeline persist to PostgreSQL
+- All tables and columns persist
+- Schema survives container restarts, reboots, and `docker compose down`
+- PostgreSQL volume `hive-db-data` mounted persistently
 
-# mcpserver
+❌ **Not Persistent:**
+- In-memory caches (automatically refreshed on reconnect)
+- Temporary query results
+- HiveServer2 session state
+
+## Troubleshooting
+
+**Schema not showing after restart?**
+- Check PostgreSQL volume: `docker volume ls | grep hive-db-data`
+- Verify connection: `docker exec hive-metastore-db psql -U hive metastore_db -c "\dt"`
+
+**Beeline connection refused?**
+- Verify containers running: `docker ps | grep hive`
+- Check HiveServer2 logs: `docker logs hive-server | tail -20`
+
+**MCP server not starting?**
+- Run after Hive stack is running
+- Check MCP logs: `docker logs mcp-server | tail -20`
 
