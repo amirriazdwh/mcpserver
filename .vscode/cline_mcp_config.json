@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "hive-metadata": {
+      "command": "python",
+      "args": [
+        "-m",
+        "uvicorn",
+        "mcp-server.server:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "5000"
+      ],
+      "env": {
+        "HIVE_HOST": "localhost",
+        "HIVE_PORT": "9083"
+      },
+      "disabled": false,
+      "alwaysAllow": []
+    }
+  }
+}
