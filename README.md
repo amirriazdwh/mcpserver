@@ -22,9 +22,9 @@ After Hive services are running, start the MCP service from the `mcp-server` com
 docker compose -f mcp-server/docker-compose.yml up -d
 ```
 
-## Access Hive Metadata via MCP Server
+## Access Hive Metadata via MCP Server (Recommended)
 
-The MCP server provides three tools for accessing Hive metadata:
+The MCP server provides three tools for accessing Hive metadata via the Hive Metastore Thrift service (port 9083):
 
 - **list_databases()** - Returns all available databases
 - **list_tables(database_name)** - Lists tables in a specific database
@@ -34,7 +34,13 @@ Example from Python:
 
 ```python
 import sys
+import os
 sys.path.insert(0, 'mcp-server')
+
+# Set connection to localhost for host-based testing
+os.environ['HIVE_HOST'] = 'localhost'
+os.environ['HIVE_PORT'] = '9083'
+
 from server import list_databases, list_tables, get_table_schema
 
 # List all databases
@@ -50,7 +56,46 @@ schema = get_table_schema('financial_lake', 'dim_customer')
 print(schema)  # {'customer_id': 'int', 'first_name': 'string', 'last_name': 'string'}
 ```
 
-**Note:** HiveServer2 (port 10000) support is available but not currently the primary interface. The MCP server connects directly to the Hive Metastore Thrift service (port 9083) which is fully operational.
+Run the verification script to test MCP server functionality:
+
+```bash
+. .venv/bin/activate
+python tests/verify_mcp_server.py
+```
+
+## Access Hive via Beeline (HiveServer2)
+
+To connect to Hive using Beeline (HiveServer2 on port 10000):
+
+**From inside the hive-server container:**
+
+```bash
+docker exec -it hive-server /opt/hive/bin/beeline -u jdbc:hive2://hive-server:10000
+```
+
+**Interactive Beeline commands:**
+
+```sql
+-- Show all databases
+SHOW DATABASES;
+
+-- Use a specific database
+USE financial_lake;
+
+-- Show tables in current database
+SHOW TABLES;
+
+-- Show table schema
+DESCRIBE dim_customer;
+
+-- Show table details
+DESC FORMATTED fact_transaction;
+
+-- Run a query
+SELECT * FROM dim_customer LIMIT 5;
+```
+
+**Note:** HiveServer2 (port 10000) requires proper Java configuration. The MCP server (port 9083 - Hive Metastore Thrift) is the primary recommended interface and is guaranteed to be operational. If HiveServer2 doesn't respond, use the MCP server tools for metadata access.
 
 ## Stop services
 
