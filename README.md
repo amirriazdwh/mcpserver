@@ -63,109 +63,83 @@ Run the verification script to test MCP server functionality:
 python tests/verify_mcp_server.py
 ```
 
-## Access Hive via Beeline (HiveServer2)
+## Access Hive via Beeline (HiveServer2) ✅ WORKING
 
-### ⚠️ Known Limitation: HiveServer2 Port Binding Issue
+### Quick Start: Connect to HiveServer2
 
-**Status:** HiveServer2 process runs successfully but **does NOT bind to TCP port 10000** despite proper configuration.
-
-**Root Cause:** Apache Hive 4.0.0 in the official Docker image (`apache/hive:4.0.0`) has a compatibility issue where HiveServer2 cannot bind to network ports. This is a known limitation of this specific version/image combination.
-
-**Evidence:**
-- HiveServer2 Java process (PID 1) runs with all correct parameters
-- hive-site.xml correctly configured with `hive.server2.thrift.port=10000` and `hive.server2.thrift.bind.host=0.0.0.0`
-- Container port mapping is correct (10000:10000)
-- However, `/proc/net/tcp` shows NO listening socket on port 10000 (hex 2710)
-- Beeline JDBC connection fails with "Connection refused"
-
-### ✅ Recommended Solution: Use Hive Metastore Thrift Service (WORKING)
-
-Instead of HiveServer2/Beeline, use the **Hive Metastore service (port 9083)** which is fully operational:
-
-#### Option 1: Use Python Hive Metastore Client
-
-```python
-from hive_metastore_client import HiveMetastoreClient
-
-client = HiveMetastoreClient('localhost', 9083)
-try:
-    client.open()
-    
-    # Get all databases
-    databases = client.get_all_databases()
-    print(f"Databases: {databases}")
-    
-    # Get all tables in a database
-    tables = client.get_all_tables('financial_lake')
-    print(f"Tables: {tables}")
-    
-    # Get table details
-    table = client.get_table('financial_lake', 'dim_customer')
-    columns = [(col.name, col.type) for col in table.sd.cols]
-    print(f"Columns: {columns}")
-    
-finally:
-    client.close()
-```
-
-#### Option 2: Use MCP Server Tools (Claude Integration)
-
-```python
-import sys
-sys.path.insert(0, 'mcp-server')
-from server import list_databases, list_tables, get_table_schema
-
-# List all databases
-print(list_databases())
-
-# List tables
-print(list_tables('financial_lake'))
-
-# Get table schema
-print(get_table_schema('financial_lake', 'dim_customer'))
-```
-
-### Historical Beeline Attempts (Reference)
-
-Beeline commands that would work if HiveServer2 bound to port 10000:
+**From your host machine:**
 
 ```bash
-# Interactive Beeline (won't work - connection refused)
-docker exec -it hive-server beeline -u jdbc:hive2://localhost:10000
-
-# Example SQL queries (for reference)
-SHOW DATABASES;
-USE financial_lake;
-SHOW TABLES;
-DESCRIBE dim_customer;
-SELECT * FROM dim_customer LIMIT 5;
+docker exec -it hive-server beeline -u jdbc:hive2://hive-server:10000
 ```
 
-### Workarounds if HiveServer2 is Critical
+**Interactive Beeline session:**
+
+```bash
+docker exec -it hive-server beeline -u jdbc:hive2://hive-server:10000
+```
+
+Then run Hive SQL commands like:
 
 ```sql
 -- Show all databases
 SHOW DATABASES;
 
--- Use a specific database
+-- Create and use a database  
+CREATE DATABASE IF NOT EXISTS financial_lake;
 USE financial_lake;
 
--- Show tables in current database
+-- Create tables
+CREATE TABLE dim_customer (
+  customer_id INT,
+  first_name STRING,
+  last_name STRING
+);
+
+CREATE TABLE fact_transaction (
+  transaction_id STRING,
+  customer_id INT,
+  amount DOUBLE
+);
+
+-- List tables
 SHOW TABLES;
 
--- Show table schema
+-- Describe table schema
 DESCRIBE dim_customer;
 
--- Show table details
-DESC FORMATTED fact_transaction;
-
--- Run a query
+-- Query data
 SELECT * FROM dim_customer LIMIT 5;
 ```
 
-### Recommended: Use Python Client Instead
+### Non-interactive Beeline Commands
 
-Since Beeline/HiveServer2 isn't available, use the Python Hive Metastore client:
+Execute SQL directly without opening interactive session:
+
+```bash
+docker exec hive-server beeline -u jdbc:hive2://hive-server:10000 -e "SHOW DATABASES;"
+```
+
+```bash
+docker exec hive-server beeline -u jdbc:hive2://hive-server:10000 -e "
+CREATE DATABASE IF NOT EXISTS mydb;
+USE mydb;
+CREATE TABLE mytable (id INT, name STRING);
+SHOW TABLES;
+"
+```
+
+### Important Notes
+
+⚠️ **HiveServer2 binding note:** HiveServer2 binds to the container's internal network interface. To connect:
+- ✅ From host: Use `docker exec -it hive-server beeline` or connect within Docker network
+- ❌ Cannot connect directly to `jdbc:hive2://localhost:10000` from host machine
+- ✅ Can connect to `jdbc:hive2://hive-server:10000` from containers in same network
+- ✅ Can use `docker exec` for seamless access from host
+
+### Alternative: Use Python Hive Metastore Client
+
+For programmatic access, use the Python client directly:
 
 ```python
 from hive_metastore_client import HiveMetastoreClient
@@ -173,20 +147,11 @@ from hive_metastore_client import HiveMetastoreClient
 client = HiveMetastoreClient('localhost', 9083)
 try:
     client.open()
-    
-    # Get all databases
     databases = client.get_all_databases()
-    print(f"Databases: {databases}")
-    
-    # Get all tables in a database
     tables = client.get_all_tables('financial_lake')
-    print(f"Tables: {tables}")
-    
-    # Get table details
     table = client.get_table('financial_lake', 'dim_customer')
     columns = [(col.name, col.type) for col in table.sd.cols]
     print(f"Columns: {columns}")
-    
 finally:
     client.close()
 ```
