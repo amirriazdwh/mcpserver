@@ -18,6 +18,7 @@ docker compose -f hive-server/docker-compose.yml up -d
 ```
 
 This starts:
+
 - PostgreSQL metastore database
 - Hive Metastore service (port 9083)
 - HiveServer2 JDBC service (port 10000)
@@ -55,6 +56,7 @@ docker exec hive-server beeline -u jdbc:hive2://hive-server:10000 -e "SHOW DATAB
 ## Persistence Guarantee
 
 ✅ **Schema persists across all restarts** because:
+
 - PostgreSQL data stored in named volume `hive-db-data` (mounted to `/var/lib/postgresql/data`)
 - HiveServer2 uses PostgreSQL backend (not local Derby)
 - Hive Metastore also uses same PostgreSQL backend
@@ -100,7 +102,7 @@ SELECT * FROM dim_customer LIMIT 5;
 
 ### Method 2: MCP Server Tools (Recommended for Claude Integration)
 
-The MCP server provides three tools via the Hive Metastore Thrift service (port 9083):
+The MCP server provides metadata tools via the Hive Metastore Thrift service (port 9083):
 
 ```bash
 docker compose -f mcp-server/docker-compose.yml up -d
@@ -115,7 +117,14 @@ sys.path.insert(0, 'mcp-server')
 os.environ['HIVE_HOST'] = 'localhost'
 os.environ['HIVE_PORT'] = '9083'
 
-from server import list_databases, list_tables, get_table_schema
+from server import (
+  list_databases,
+  list_tables,
+  get_table_schema,
+  find_table,
+  find_table_schema,
+  find_table_partitions,
+)
 
 # List all databases
 databases = list_databases()  # ['default', 'financial_lake']
@@ -126,6 +135,18 @@ tables = list_tables('financial_lake')  # ['dim_customer', 'fact_transaction']
 # Get table schema
 schema = get_table_schema('financial_lake', 'dim_customer')
 # {'customer_id': 'int', 'first_name': 'string', 'last_name': 'string'}
+
+# Find table by name (across databases)
+matches = find_table('customer')
+# [{'database_name': 'financial_lake', 'table_name': 'dim_customer', 'match_type': 'contains'}]
+
+# Find schema without knowing the exact database first
+schema_info = find_table_schema('dim_customer')
+# {'database_name': 'financial_lake', 'table_name': 'dim_customer', 'schema': {...}}
+
+# Get partition info and partition names
+partition_info = find_table_partitions('financial_lake', 'fact_transaction')
+# {'is_partitioned': False, 'partition_columns': [], 'partition_count': 0, 'partitions': []}
 ```
 
 Verify MCP server:
@@ -162,6 +183,7 @@ client.close()
 ## Network Note
 
 ⚠️ **HiveServer2 Access:**
+
 - ✅ Use `docker exec -it hive-server beeline` from host (seamless)
 - ✅ Use `hive-server:10000` from within Docker containers
 - ❌ Cannot use `localhost:10000` from host directly (container isolation)
@@ -211,22 +233,24 @@ docker compose -f hive-server/docker-compose.yml restart
 
 ## Component Details
 
-| Component | Port | Status | Notes |
-|-----------|------|--------|-------|
-| PostgreSQL | 5432 | ✅ Internal | Persistent volume: `hive-db-data` |
-| Hive Metastore | 9083 | ✅ Thrift | Uses PostgreSQL backend |
-| HiveServer2 | 10000 | ✅ JDBC | Uses PostgreSQL backend |
-| MCP Server | - | Optional | Requires separate `docker compose up` |
+| Component      | Port  | Status      | Notes                                  |
+| -------------- | ----- | ----------- | -------------------------------------- |
+| PostgreSQL     | 5432  | ✅ Internal | Persistent volume:`hive-db-data`     |
+| Hive Metastore | 9083  | ✅ Thrift   | Uses PostgreSQL backend                |
+| HiveServer2    | 10000 | ✅ JDBC     | Uses PostgreSQL backend                |
+| MCP Server     | -     | Optional    | Requires separate`docker compose up` |
 
 ## Data Persistence
 
 ✅ **Guaranteed Persistence:**
+
 - All databases created via Beeline persist to PostgreSQL
 - All tables and columns persist
 - Schema survives container restarts, reboots, and `docker compose down`
 - PostgreSQL volume `hive-db-data` mounted persistently
 
 ❌ **Not Persistent:**
+
 - In-memory caches (automatically refreshed on reconnect)
 - Temporary query results
 - HiveServer2 session state
@@ -234,14 +258,17 @@ docker compose -f hive-server/docker-compose.yml restart
 ## Troubleshooting
 
 **Schema not showing after restart?**
+
 - Check PostgreSQL volume: `docker volume ls | grep hive-db-data`
 - Verify connection: `docker exec hive-metastore-db psql -U hive metastore_db -c "\dt"`
 
 **Beeline connection refused?**
+
 - Verify containers running: `docker ps | grep hive`
 - Check HiveServer2 logs: `docker logs hive-server | tail -20`
 
 **MCP server not starting?**
+
 - Run after Hive stack is running
 - Check MCP logs: `docker logs mcp-server | tail -20`
 
@@ -254,9 +281,10 @@ docker compose -f hive-server/docker-compose.yml restart
 When you start the MCP server, VS Code agents automatically gain access to complete Hive schema:
 
 1. **Agent Discovery** - Agents query `list_databases()` to find available databases
-2. **Table Exploration** - Agents query `list_tables(database)` for table lists  
-3. **Schema Details** - Agents query `get_table_schema(database, table)` for full schema
-4. **Intelligent Suggestions** - Agent uses schema to generate optimized code and queries
+2. **Table Exploration** - Agents query `list_tables(database)` and `find_table(name)` for fast discovery
+3. **Schema Details** - Agents query `get_table_schema(database, table)` or `find_table_schema(table)`
+4. **Partition Details** - Agents query `find_table_partitions(database, table)` for partition metadata
+5. **Intelligent Suggestions** - Agent uses schema and partition context to generate optimized code and queries
 
 ### Quick Start with Agents
 
@@ -274,6 +302,7 @@ python test-agent-integration.py
 ### Agent Capabilities
 
 With schema context available, agents can:
+
 - ✅ Smart SQL auto-completion and suggestions
 - ✅ Schema-aware query generation
 - ✅ Table relationship detection
@@ -284,11 +313,13 @@ With schema context available, agents can:
 ### Example: Agent Helping You
 
 **Your Request:**
+
 ```
 "Write a query to get all customers and their total transaction amounts"
 ```
 
 **Agent Automatically:**
+
 1. Discovers `financial_lake` database
 2. Finds `dim_customer` and `fact_transaction` tables
 3. Reads schema to find columns and types
@@ -296,6 +327,7 @@ With schema context available, agents can:
 5. Generates optimized JOIN query
 
 **Agent Suggests:**
+
 ```sql
 SELECT 
   c.customer_id,
@@ -312,7 +344,7 @@ ORDER BY total_amount DESC
 ### Agent Integration Files
 
 - `.vscode/mcp_config.json` - VS Code agent configuration
-- `MCP_AGENT_SETUP.md` - Complete agent integration guide  
+- `MCP_AGENT_SETUP.md` - Complete agent integration guide
 - `start-mcp-server.sh` - MCP server startup script
 - `test-agent-integration.py` - Agent capability demonstration
 

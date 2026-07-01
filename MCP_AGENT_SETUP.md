@@ -74,7 +74,7 @@ pip install fastmcp
 
 ## Testing
 
-The MCP server provides three tools to agents:
+The MCP server provides core metadata tools to agents:
 
 ### 1. list_databases()
 Returns all available Hive databases
@@ -103,14 +103,48 @@ result: {
 }
 ```
 
+### 4. find_table(table_name: str, database_name: str | None = None, exact_match: bool = False)
+Find matching table names across one database or all databases
+```python
+find_table("customer")
+result: [
+  {"database_name": "financial_lake", "table_name": "dim_customer", "match_type": "contains"}
+]
+```
+
+### 5. find_table_schema(table_name: str, database_name: str | None = None, include_partitions: bool = True)
+Find a table by name and return schema, even when database is not provided
+```python
+find_table_schema("dim_customer")
+result: {
+  "database_name": "financial_lake",
+  "table_name": "dim_customer",
+  "schema": {"customer_id": "int", "first_name": "string", "last_name": "string"}
+}
+```
+
+### 6. find_table_partitions(database_name: str, table_name: str, max_results: int = 100)
+Get partition columns and current partition names for a table
+```python
+find_table_partitions("financial_lake", "fact_transaction")
+result: {
+  "is_partitioned": false,
+  "partition_columns": [],
+  "partition_count": 0,
+  "partitions": []
+}
+```
+
 ## Current Status
 
 ✅ **MCP Server is fully functional and ready for agent integration**
 
-The three tools are tested and working. Any MCP-compatible VS Code agent can now:
+The metadata tools are tested and working. Any MCP-compatible VS Code agent can now:
 - Discover all databases
 - List tables in any database
 - Get complete schema information
+- Find tables quickly by partial name
+- Inspect partitioning strategy and partitions
 - Use this context to provide better suggestions
 
 ## Example Agent Usage
@@ -124,8 +158,9 @@ When you ask a VS Code agent (like Cline) to help with Hive:
 
 2. **Agent calls MCP tools:**
    - `list_databases()` → sees `financial_lake`
-   - `list_tables("financial_lake")` → sees `dim_customer`
-   - `get_table_schema("financial_lake", "dim_customer")` → sees all columns
+  - `find_table("customer")` → sees `financial_lake.dim_customer`
+  - `find_table_schema("dim_customer")` → sees all columns
+  - `find_table_partitions("financial_lake", "dim_customer")` → sees partition details
 
 3. **Agent provides smart suggestions:**
    ```sql
